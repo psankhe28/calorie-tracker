@@ -65,11 +65,18 @@ create index if not exists idx_food_entries_user_id_logged_at on food_entries (u
 -- "pdf-imports", auto-created by the backend on first upload -- see app/services/pdf_import.py);
 -- this row is the "receipt" -- what got extracted from it, so a user can revisit an old upload
 -- and see both the source file and what was imported/skipped from it.
+-- file_hash (sha256 of the raw PDF bytes) backs the duplicate-upload check in
+-- app/services/pdf_import.py -- re-uploading the exact same file is rejected before it's
+-- re-parsed or re-stored. If you already ran an earlier version of this schema, apply this
+-- migration by hand:
+--   alter table pdf_imports add column if not exists file_hash text;
+--   create unique index if not exists idx_pdf_imports_user_id_file_hash on pdf_imports (user_id, file_hash);
 create table if not exists pdf_imports (
     id bigint generated always as identity primary key,
     user_id bigint not null references users (id) on delete cascade,
     file_name text not null,
     storage_path text not null,
+    file_hash text,
     imported_count integer not null default 0,
     extracted_entries jsonb not null default '[]'::jsonb,
     skipped_rows jsonb not null default '[]'::jsonb,
@@ -77,6 +84,7 @@ create table if not exists pdf_imports (
 );
 
 create index if not exists idx_pdf_imports_user_id_created_at on pdf_imports (user_id, created_at desc);
+create unique index if not exists idx_pdf_imports_user_id_file_hash on pdf_imports (user_id, file_hash);
 
 -- The backend authenticates with the service_role key and enforces per-user access itself
 -- (every query is filtered by the authenticated user's id in application code), so RLS is

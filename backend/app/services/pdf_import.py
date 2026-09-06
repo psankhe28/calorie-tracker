@@ -1,3 +1,4 @@
+import hashlib
 import io
 import re
 import uuid
@@ -8,7 +9,7 @@ from pydantic import ValidationError
 from supabase import Client
 
 from app.core.config import get_settings
-from app.core.errors import ExternalServiceError, NotFoundError
+from app.core.errors import ConflictError, ExternalServiceError, InvalidFileError, NotFoundError
 from app.schemas.food_entry import FoodEntryCreate, MealType
 from app.schemas.imports import ImportResult, PdfImportDetail, PdfImportSummary, SkippedRow
 from app.services import food_service
@@ -57,6 +58,36 @@ field is missing, use 0. Respond with ONLY the JSON array, no prose, no markdown
 TEXT:
 {text}"""
 
+# A random PDF (resume, invoice, ebook, ...) is very unlikely to hit several of these; a real
+# food/nutrition diary export almost always mentions calories/macros plus meal-related terms.
+_FOOD_DIARY_KEYWORDS = [
+    "calorie",
+    "kcal",
+    "protein",
+    "carb",
+    "fat",
+    "fiber",
+    "sugar",
+    "breakfast",
+    "lunch",
+    "dinner",
+    "snack",
+    "meal",
+    "nutrition",
+    "diet",
+    "macros",
+    "serving",
+    "food diary",
+    "food log",
+]
+_MIN_FOOD_DIARY_KEYWORD_MATCHES = 3
+
+
+def _looks_like_food_diary(text: str) -> bool:
+    lowered = text.lower()
+    matches = sum(1 for keyword in _FOOD_DIARY_KEYWORDS if keyword in lowered)
+    return matches >= _MIN_FOOD_DIARY_KEYWORD_MATCHES
+
 
 def _match_header(header: str) -> str | None:
     header_lower = header.strip().lower()
@@ -88,10 +119,7 @@ def _extract_text(pdf_bytes: bytes) -> str:
         return "\n".join(page.extract_text() or "" for page in pdf.pages)
 
 
-def _rows_via_llm(pdf_bytes: bytes) -> list[dict]:
-    text = _extract_text(pdf_bytes).strip()
-    if not text:
-        return []
+def _rows_via_llm(text: str) -> list[dict]:
     client = get_client()
     try:
         response = client.chat.completions.create(
@@ -168,19 +196,67 @@ def _coerce_row(row: dict) -> FoodEntryCreate:
     )
 
 
+def _find_duplicate_import(supabase: Client, user_id: int, file_hash: str) -> dict | None:
+    result = (
+        supabase.table("pdf_imports")
+        .select("id, file_name, created_at")
+        .eq("user_id", user_id)
+        .eq("file_hash", file_hash)
+        .limit(1)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def _row_signature(payload: FoodEntryCreate) -> tuple:
+    return (
+        payload.food_name.strip().lower(),
+        payload.meal_type,
+        round(payload.calories, 1),
+        payload.logged_at.isoformat(),
+    )
+
+
 def import_food_diary_pdf(supabase: Client, user_id: int, file_name: str, pdf_bytes: bytes) -> ImportResult:
+    file_hash = hashlib.sha256(pdf_bytes).hexdigest()
+    duplicate = _find_duplicate_import(supabase, user_id, file_hash)
+    if duplicate is not None:
+        raise ConflictError(
+            f"This exact PDF was already imported as '{duplicate['file_name']}' on "
+            f"{duplicate['created_at']}. Re-upload only if you meant to import it again."
+        )
+
     rows = _extract_tables(pdf_bytes)
     if not rows:
-        rows = _rows_via_llm(pdf_bytes)
+        # No recognizable food table -- before burning an LLM call (and storing the file), make
+        # sure this is actually a food/nutrition diary and not an arbitrary PDF.
+        text = _extract_text(pdf_bytes).strip()
+        if not text:
+            raise InvalidFileError(
+                "Couldn't read any text from this PDF. Please upload a text-based food diary "
+                "export rather than a scanned image."
+            )
+        if not _looks_like_food_diary(text):
+            raise InvalidFileError(
+                "This PDF doesn't look like a food diary or nutrition log. Please upload a "
+                "food/calorie tracking export."
+            )
+        rows = _rows_via_llm(text)
 
     imported = []
     skipped = []
+    seen_signatures: set[tuple] = set()
     for row in rows:
         try:
             payload = _coerce_row(row)
         except (ValueError, ValidationError) as exc:
             skipped.append(SkippedRow(row=row, reason=str(exc)))
             continue
+        signature = _row_signature(payload)
+        if signature in seen_signatures:
+            skipped.append(SkippedRow(row=row, reason="Duplicate entry: identical to another row in this PDF"))
+            continue
+        seen_signatures.add(signature)
         entry = food_service.create_entry(supabase, user_id, payload)
         imported.append(entry)
 
@@ -200,6 +276,7 @@ def import_food_diary_pdf(supabase: Client, user_id: int, file_name: str, pdf_by
                 "user_id": user_id,
                 "file_name": file_name,
                 "storage_path": storage_path,
+                "file_hash": file_hash,
                 "imported_count": len(imported),
                 "extracted_entries": imported,
                 "skipped_rows": [s.model_dump() for s in skipped],

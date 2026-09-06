@@ -25,3 +25,8 @@ class ExternalServiceError(AppError):
 class ServiceUnavailableError(AppError):
     def __init__(self, message: str = "Service is not configured"):
         super().__init__(message, status_code=503)
+
+
+class InvalidFileError(AppError):
+    def __init__(self, message: str = "Uploaded file is invalid"):
+        super().__init__(message, status_code=422)
