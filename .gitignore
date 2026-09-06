@@ -1,0 +1,18 @@
+# Environment
+.env
+
+Typeface India_Project Assignment.pdf
+test_user.txt
+
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store

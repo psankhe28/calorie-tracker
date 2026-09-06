@@ -1,0 +1,198 @@
+# Personal Calorie Tracker
+
+A full-stack app for logging meals, tracking macro/micro nutrition, setting health goals, and
+visualizing trends over time.
+
+## Stack
+
+- **Backend:** Python, FastAPI, JWT auth, [Supabase](https://supabase.com) (hosted Postgres,
+  accessed via the `supabase-py` client — no ORM/migration tool)
+- **Frontend:** React + TypeScript (Vite), React Router, Recharts, Axios
+- **AI:** OpenAI (vision for nutrition-photo extraction, function-calling for the chat assistant,
+  and as a fallback parser for free-form PDF food diaries)
+
+## Features
+
+**Core requirements**
+- Goal setting (daily calorie target, protein/carb/fat targets, weight goal)
+- Meal entry grouped by meal type (breakfast/lunch/dinner/snack) with calories, macros, and
+  free-form micronutrients
+- Time-range food entry listing, filterable by date range and meal type, with pagination
+- Nutrition reports: weekly calorie trend, macro breakdown by day, micronutrient summary, and
+  goal-vs-actual comparison — all chart-ready JSON, rendered with Recharts
+- AI-powered calorie extraction: upload a nutrition label or plate photo and the app pre-fills
+  the meal entry form (you review and confirm before saving — nothing is auto-saved)
+- REST API fully decoupled from the frontend; all list endpoints support pagination
+
+**Bonus features**
+- Multi-user support: sign up, log in, and each user's data is fully isolated (JWT auth)
+- Conversational chat assistant: ask it to log meals, check/set goals, list entries, or summarize
+  your week — powered by OpenAI function-calling over the same service layer the REST API uses
+- Bulk PDF import: upload a tabular food-diary export and it's parsed automatically; if the PDF
+  isn't a clean table, it falls back to asking the LLM to extract entries from the raw text
+
+## Project layout
+
+```
+backend/    FastAPI app, Supabase client, pytest tests
+backend/schema.sql   Table definitions -- run once in the Supabase SQL Editor
+frontend/   React + Vite single-page app
+docker-compose.yml   Runs backend + frontend together (Supabase is hosted, not containerized)
+run.sh      Runs backend + frontend locally without Docker
+```
+
+## Running it
+
+### 0. Set up Supabase (one-time)
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Open **SQL Editor** in the dashboard, paste the contents of `backend/schema.sql`, and run it.
+   This creates the `users`, `goals`, and `food_entries` tables. There's no migration tool in
+   this project — that file is the schema's source of truth, applied by hand.
+3. Grab two values from **Project Settings → API**:
+   - the **Project URL** → `SUPABASE_URL`
+   - the **service_role secret** (not the anon/publishable key) → `SUPABASE_SERVICE_KEY`
+
+   The backend authorizes requests itself (every query is scoped to the logged-in user's id in
+   application code), so it needs the service_role key for unrestricted server-side access — RLS
+   is intentionally left off on these tables. **Never expose the service_role key to the
+   frontend or commit it.**
+
+### Option A: Docker Compose
+
+```bash
+cp .env.example .env      # fill in SUPABASE_URL, SUPABASE_SERVICE_KEY, and OPENAI_API_KEY
+docker compose up --build
+```
+
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8001 (interactive docs at http://localhost:8001/docs)
+
+> Note: the backend is published on host port **8001**, not 8000, purely to sidestep a port
+> collision with another unrelated project on this machine. Override it via `ports:` in
+> `docker-compose.yml` if you'd rather use 8000.
+
+### Option B: `run.sh` (no Docker)
+
+```bash
+cp .env.example .env      # same as above
+./run.sh
+```
+
+Sets up the backend venv, installs frontend deps on first run, and starts both with the
+backend on `:8001` and frontend on `:5173`. Ctrl+C stops both. Override ports with
+`BACKEND_PORT=... FRONTEND_PORT=... ./run.sh`.
+
+### Running backend tests
+
+```bash
+cd backend
+source .venv/bin/activate   # if not already active
+pytest
+```
+
+Tests run against a small in-memory fake of the Supabase client (`tests/fake_supabase.py`),
+not a real project, so they're fast, offline, and don't touch your actual data.
+
+## Deploying (Vercel + Render)
+
+The frontend deploys to **Vercel** (static Vite build); the backend deploys to **Render** as a
+normal long-lived server (not a serverless function — some AI requests take longer than a
+serverless timeout allows).
+
+### Backend on Render
+
+1. In the Render dashboard: **New → Blueprint**, point it at this repo. It picks up
+   `render.yaml` at the repo root automatically (Docker build from `backend/Dockerfile`, health
+   check on `/api/health`).
+2. Fill in the env vars Render asks for (marked `sync: false` in the blueprint, so they're never
+   stored in the repo): `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `OPENAI_API_KEY`, and
+   `CORS_ORIGINS` (set this once you have your Vercel URL — see below; format is a JSON array
+   string, e.g. `["https://your-app.vercel.app"]`). `JWT_SECRET` is auto-generated by Render;
+   `OPENAI_BASE_URL`/`OPENAI_MODEL` already default to OpenRouter in the blueprint.
+3. Deploy. Note the resulting backend URL (`https://<name>.onrender.com`).
+
+Render's free tier spins the service down after inactivity — the first request after a quiet
+period can take 30–50s to wake it back up. That's a free-tier tradeoff, not a bug.
+
+### Frontend on Vercel
+
+1. In the Vercel dashboard: **Add New → Project**, import this repo.
+2. Set **Root Directory** to `frontend` (this is a monorepo — the Vite app isn't at the repo
+   root). Vercel auto-detects the Vite framework preset from there.
+3. Add environment variables: `VITE_API_BASE_URL` = your Render backend URL from above, and
+   `VITE_ENABLE_AI_FEATURES` = `true` (or `false` to hide the AI features). Vite bakes these in
+   at build time, so redeploy after changing either.
+4. Deploy. `frontend/vercel.json` handles client-side routing (React Router) so direct links to
+   e.g. `/meals` or `/goals` don't 404.
+
+### After both are up
+
+Go back to Render and set `CORS_ORIGINS` to your actual Vercel URL (e.g.
+`["https://your-app.vercel.app"]`), then redeploy the backend — until that's set, the deployed
+frontend can't call the deployed API.
+
+## Environment variables
+
+See `.env.example` for the full list.
+
+- `SUPABASE_URL` / `SUPABASE_SERVICE_KEY` — **required.** Without these the backend refuses to
+  start any DB-touching request with a clear `503` rather than crashing.
+- `OPENAI_API_KEY` — powers the photo-based nutrition extraction, the chat assistant, and the
+  LLM fallback for free-form PDF imports. **Optional.** Without it, those three endpoints return
+  a clear `503` explaining what's missing instead of crashing; every other feature (goals, meal
+  CRUD, pagination/filtering, reports, tabular PDF import, multi-user auth) works normally.
+- `OPENAI_MODEL` — defaults to `gpt-4o-mini`.
+
+## Assumptions & design notes
+
+- **Supabase as hosted Postgres, not an ORM replacement.** The backend talks to it via
+  `supabase-py`'s table API rather than SQLAlchemy — no migration tool, so `backend/schema.sql`
+  is applied by hand once per environment. Pagination uses `.range()` with an exact count;
+  filtering uses `.eq()/.gte()/.lte()`.
+- **Auth stays custom (bcrypt + our own JWTs), not Supabase Auth.** Only the data layer moved to
+  Supabase; login/signup/token issuance are unchanged from before, so the API contract the
+  frontend depends on didn't change.
+- **The backend uses the service_role key and enforces authorization itself** — every query is
+  filtered by the authenticated user's id in application code. Row-Level Security is off on these
+  tables; if you ever query them from the frontend with the anon key, turn RLS on and add
+  policies first.
+- **One active goal per user.** Setting goals is an upsert — there's no historical log of goal
+  changes, just the current target. This matched the spec ("set and manage personal health
+  goals") without over-engineering a goal-history feature that wasn't asked for.
+- **Meal types are a fixed enum** (breakfast/lunch/dinner/snack), per the spec's explicit list.
+- **Micronutrients are a free-form key-value map** (JSONB) rather than fixed columns, since the
+  spec doesn't pin down which vitamins/minerals to support and real nutrition labels vary widely.
+  The reports endpoint sums whatever keys appear across entries in range.
+- **AI photo extraction never saves directly.** It pre-fills the meal entry form so the user can
+  review/correct the AI's estimate before it's persisted — this matches "automatically extract
+  and pre-fill," not "automatically log."
+- **PDF import tries structured extraction first.** `pdfplumber` table extraction runs first
+  (fast, deterministic, no API cost); only if no recognizable food-diary table is found does it
+  fall back to sending the extracted text to the LLM for extraction.
+- **Chat history is stateless server-side.** The client resends the running conversation on each
+  request rather than the backend persisting chat sessions — simpler, and there was no
+  requirement to persist chat transcripts.
+- **Tests mock the Supabase client, not a real project.** `tests/fake_supabase.py` is a minimal
+  in-memory stand-in for the handful of query-builder methods the app actually uses
+  (select/insert/update/delete, eq/gte/lte, order, range/limit). This keeps the suite fast and
+  offline; the trade-off is it isn't a substitute for occasionally testing against a real project.
+
+## API overview
+
+All routes are prefixed `/api` and (except `/api/auth/*` and `/api/health`) require a
+`Authorization: Bearer <token>` header.
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/api/auth/signup`, `/api/auth/login` | Get a JWT |
+| GET | `/api/auth/me` | Current user |
+| GET/PUT | `/api/goals` | Read/upsert health goals |
+| POST/GET/PUT/DELETE | `/api/food-entries[/{id}]` | Meal CRUD; `GET` supports `start_date`, `end_date`, `meal_type`, `page`, `page_size` |
+| GET | `/api/reports/weekly-calories`, `/macros`, `/micros`, `/goal-vs-actual` | Chart-ready report data |
+| POST | `/api/ai/extract-nutrition` | Upload an image, get back pre-fill nutrition data |
+| POST | `/api/chat` | Send a message + prior history, get a reply + updated history |
+| POST | `/api/import/pdf` | Upload a food-diary PDF, get back imported entries + any skipped rows |
+
+Full interactive docs (request/response schemas) are auto-generated by FastAPI at `/docs` once
+the backend is running.
