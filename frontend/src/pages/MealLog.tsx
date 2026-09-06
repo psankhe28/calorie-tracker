@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { MealEntryForm } from "../components/MealEntryForm";
+import { PageSizeSelect } from "../components/PageSizeSelect";
 import { getApiErrorMessage } from "../api/client";
 import { createFoodEntry, deleteFoodEntry, listFoodEntries, updateFoodEntry } from "../api/foodEntries";
 import type { FoodEntry, FoodEntryInput, MealType } from "../api/types";
 import { EditIcon, PlusIcon, TrashIcon } from "../components/icons";
 
-const PAGE_SIZE_OPTIONS = [5, 10, 20, 30] as const;
 const DEFAULT_PAGE_SIZE = 10;
 
 export function MealLog() {
@@ -198,23 +198,13 @@ export function MealLog() {
           <button className="btn btn-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
             Next
           </button>
-          <label className="muted" htmlFor="page_size" style={{ marginLeft: "auto" }}>
-            Per page
-          </label>
-          <select
-            id="page_size"
+          <PageSizeSelect
             value={pageSize}
-            onChange={(e) => {
-              setPageSize(Number(e.target.value));
+            onChange={(size) => {
+              setPageSize(size);
               setPage(1);
             }}
-          >
-            {PAGE_SIZE_OPTIONS.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
+          />
         </div>
       </div>
     </div>

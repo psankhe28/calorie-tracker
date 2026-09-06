@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { PageSizeSelect } from "../components/PageSizeSelect";
 import { getApiErrorMessage } from "../api/client";
 import { listFoodEntries } from "../api/foodEntries";
 import { getGoal } from "../api/goals";
 import type { FoodEntry, Goal } from "../api/types";
 
-const PAGE_SIZE = 5;
+const DEFAULT_PAGE_SIZE = 5;
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -40,6 +41,7 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   useEffect(() => {
     const today = isoDate(new Date());
@@ -67,8 +69,8 @@ export function Dashboard() {
     { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
   );
 
-  const totalPages = Math.max(Math.ceil(todayEntries.length / PAGE_SIZE), 1);
-  const pageEntries = todayEntries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(Math.ceil(todayEntries.length / pageSize), 1);
+  const pageEntries = todayEntries.slice((page - 1) * pageSize, page * pageSize);
 
   return (
     <div className="page dashboard-page">
@@ -148,6 +150,13 @@ export function Dashboard() {
             <button className="btn btn-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
               Next
             </button>
+            <PageSizeSelect
+              value={pageSize}
+              onChange={(size) => {
+                setPageSize(size);
+                setPage(1);
+              }}
+            />
           </div>
         )}
       </div>

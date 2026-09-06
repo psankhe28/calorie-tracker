@@ -630,6 +630,36 @@ tbody tr:hover {
   margin-top: 1rem;
 }
 
+.page-size-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.page-size-select label {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.page-size-select select {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.page-size-select select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px var(--color-primary-soft);
+}
+
 .page-loading {
   padding: 2.5rem;
   text-align: center;
