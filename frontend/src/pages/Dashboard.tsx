@@ -5,6 +5,8 @@ import { listFoodEntries } from "../api/foodEntries";
 import { getGoal } from "../api/goals";
 import type { FoodEntry, Goal } from "../api/types";
 
+const PAGE_SIZE = 5;
+
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -37,6 +39,7 @@ export function Dashboard() {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const today = isoDate(new Date());
@@ -64,8 +67,11 @@ export function Dashboard() {
     { calories: 0, protein_g: 0, carbs_g: 0, fat_g: 0 },
   );
 
+  const totalPages = Math.max(Math.ceil(todayEntries.length / PAGE_SIZE), 1);
+  const pageEntries = todayEntries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
-    <div className="page">
+    <div className="page dashboard-page">
       <h1>Today's Summary</h1>
       {error && <div className="error-banner">{error}</div>}
 
@@ -118,7 +124,7 @@ export function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {todayEntries.map((entry) => (
+              {pageEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td>
                     <span className={`pill ${entry.meal_type}`}>{entry.meal_type}</span>
@@ -129,6 +135,20 @@ export function Dashboard() {
               ))}
             </tbody>
           </table>
+        )}
+
+        {todayEntries.length > 0 && (
+          <div className="pagination">
+            <button className="btn btn-secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              Previous
+            </button>
+            <span className="muted">
+              Page {page} of {totalPages} ({todayEntries.length} total)
+            </span>
+            <button className="btn btn-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              Next
+            </button>
+          </div>
         )}
       </div>
     </div>

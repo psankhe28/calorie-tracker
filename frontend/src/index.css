@@ -1028,6 +1028,33 @@ tbody tr:hover {
   font-size: 0.88rem;
 }
 
+/* ---------- Dashboard ---------- */
+
+.dashboard-page {
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+
+.dashboard-page h1 {
+  margin-bottom: 1rem;
+}
+
+.dashboard-page .stat-grid {
+  margin-bottom: 1rem;
+}
+
+.dashboard-page .info-banner {
+  margin-bottom: 1rem;
+}
+
+.dashboard-page .card {
+  margin-bottom: 0;
+}
+
+.dashboard-page .stat-card {
+  padding: 1rem 1.25rem;
+}
+
 /* ---------- Dashboard stat cards ---------- */
 
 .stat-grid {
