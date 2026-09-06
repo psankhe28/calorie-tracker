@@ -5,12 +5,14 @@ import { createFoodEntry, deleteFoodEntry, listFoodEntries, updateFoodEntry } fr
 import type { FoodEntry, FoodEntryInput, MealType } from "../api/types";
 import { EditIcon, PlusIcon, TrashIcon } from "../components/icons";
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 30] as const;
+const DEFAULT_PAGE_SIZE = 10;
 
 export function MealLog() {
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [mealType, setMealType] = useState<MealType | "">("");
@@ -28,7 +30,7 @@ export function MealLog() {
         endDate: endDate ? `${endDate}T23:59:59` : undefined,
         mealType: mealType || undefined,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       });
       setEntries(result.items);
       setTotal(result.total);
@@ -42,7 +44,7 @@ export function MealLog() {
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, startDate, endDate, mealType]);
+  }, [page, pageSize, startDate, endDate, mealType]);
 
   async function handleCreate(input: FoodEntryInput) {
     await createFoodEntry(input);
@@ -68,7 +70,7 @@ export function MealLog() {
     }
   }
 
-  const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
+  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
 
   return (
     <div className="page">
@@ -196,6 +198,23 @@ export function MealLog() {
           <button className="btn btn-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
             Next
           </button>
+          <label className="muted" htmlFor="page_size" style={{ marginLeft: "auto" }}>
+            Per page
+          </label>
+          <select
+            id="page_size"
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setPage(1);
+            }}
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
     </div>
