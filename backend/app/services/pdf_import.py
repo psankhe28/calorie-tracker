@@ -1,5 +1,6 @@
 import io
 import re
+import uuid
 from datetime import datetime
 
 import pdfplumber
@@ -7,13 +8,29 @@ from pydantic import ValidationError
 from supabase import Client
 
 from app.core.config import get_settings
-from app.core.errors import ExternalServiceError
+from app.core.errors import ExternalServiceError, NotFoundError
 from app.schemas.food_entry import FoodEntryCreate, MealType
-from app.schemas.imports import ImportResult, SkippedRow
+from app.schemas.imports import ImportResult, PdfImportDetail, PdfImportSummary, SkippedRow
 from app.services import food_service
 from app.services.openai_client import extract_json_array, get_client
 
 settings = get_settings()
+
+_BUCKET = "pdf-imports"
+_bucket_ready = False
+
+
+def _ensure_bucket(supabase: Client) -> None:
+    """Create the storage bucket on first use. Idempotent -- if it already exists this just
+    swallows the resulting error, since supabase-py has no clean "create if not exists"."""
+    global _bucket_ready
+    if _bucket_ready:
+        return
+    try:
+        supabase.storage.create_bucket(_BUCKET, options={"public": False})
+    except Exception:
+        pass
+    _bucket_ready = True
 
 # Maps canonical field -> header keywords we'll match against (case-insensitive, substring).
 _HEADER_ALIASES: dict[str, list[str]] = {
@@ -151,7 +168,7 @@ def _coerce_row(row: dict) -> FoodEntryCreate:
     )
 
 
-def import_food_diary_pdf(supabase: Client, user_id: int, pdf_bytes: bytes) -> ImportResult:
+def import_food_diary_pdf(supabase: Client, user_id: int, file_name: str, pdf_bytes: bytes) -> ImportResult:
     rows = _extract_tables(pdf_bytes)
     if not rows:
         rows = _rows_via_llm(pdf_bytes)
@@ -167,8 +184,89 @@ def import_food_diary_pdf(supabase: Client, user_id: int, pdf_bytes: bytes) -> I
         entry = food_service.create_entry(supabase, user_id, payload)
         imported.append(entry)
 
+    _ensure_bucket(supabase)
+    storage_path = f"{user_id}/{uuid.uuid4()}_{file_name}"
+    try:
+        supabase.storage.from_(_BUCKET).upload(
+            storage_path, pdf_bytes, {"content-type": "application/pdf"}
+        )
+    except Exception as exc:
+        raise ExternalServiceError(f"Failed to store the uploaded PDF: {exc}") from exc
+
+    record = (
+        supabase.table("pdf_imports")
+        .insert(
+            {
+                "user_id": user_id,
+                "file_name": file_name,
+                "storage_path": storage_path,
+                "imported_count": len(imported),
+                "extracted_entries": imported,
+                "skipped_rows": [s.model_dump() for s in skipped],
+            }
+        )
+        .execute()
+    )
+
     return ImportResult(
+        id=record.data[0]["id"],
         imported_count=len(imported),
         entries=imported,
         skipped_rows=skipped,
     )
+
+
+def list_pdf_imports(supabase: Client, user_id: int) -> list[PdfImportSummary]:
+    result = (
+        supabase.table("pdf_imports")
+        .select("id, file_name, imported_count, skipped_rows, created_at")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [
+        PdfImportSummary(
+            id=row["id"],
+            file_name=row["file_name"],
+            imported_count=row["imported_count"],
+            skipped_count=len(row["skipped_rows"] or []),
+            created_at=row["created_at"],
+        )
+        for row in result.data
+    ]
+
+
+def _get_pdf_import_row(supabase: Client, user_id: int, import_id: int) -> dict:
+    result = (
+        supabase.table("pdf_imports")
+        .select("*")
+        .eq("id", import_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        raise NotFoundError("PDF import not found")
+    return result.data[0]
+
+
+def get_pdf_import_detail(supabase: Client, user_id: int, import_id: int) -> PdfImportDetail:
+    row = _get_pdf_import_row(supabase, user_id, import_id)
+    return PdfImportDetail(
+        id=row["id"],
+        file_name=row["file_name"],
+        imported_count=row["imported_count"],
+        entries=row["extracted_entries"],
+        skipped_rows=row["skipped_rows"],
+        created_at=row["created_at"],
+    )
+
+
+def get_pdf_import_file(supabase: Client, user_id: int, import_id: int) -> tuple[bytes, str]:
+    """Returns (pdf_bytes, file_name) for the original upload, after verifying ownership."""
+    row = _get_pdf_import_row(supabase, user_id, import_id)
+    try:
+        pdf_bytes = supabase.storage.from_(_BUCKET).download(row["storage_path"])
+    except Exception as exc:
+        raise ExternalServiceError(f"Failed to retrieve the stored PDF: {exc}") from exc
+    return pdf_bytes, row["file_name"]

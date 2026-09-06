@@ -94,8 +94,31 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface SkippedRow {
+  row: unknown;
+  reason: string;
+}
+
 export interface ImportResult {
+  id: number;
   imported_count: number;
   entries: FoodEntry[];
-  skipped_rows: { row: unknown; reason: string }[];
+  skipped_rows: SkippedRow[];
+}
+
+export interface PdfImportSummary {
+  id: number;
+  file_name: string;
+  imported_count: number;
+  skipped_count: number;
+  created_at: string;
+}
+
+export interface PdfImportDetail {
+  id: number;
+  file_name: string;
+  imported_count: number;
+  entries: FoodEntry[];
+  skipped_rows: SkippedRow[];
+  created_at: string;
 }

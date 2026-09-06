@@ -574,6 +574,14 @@ tbody tr:hover {
   background: var(--color-surface-sunken);
 }
 
+.clickable-row {
+  cursor: pointer;
+}
+
+.clickable-row.selected {
+  background: var(--color-primary-soft);
+}
+
 /* ---------- Pills (meal type tags) ---------- */
 
 .pill {

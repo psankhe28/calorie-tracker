@@ -56,6 +56,23 @@ create table if not exists food_entries (
 create index if not exists idx_food_entries_user_id on food_entries (user_id);
 create index if not exists idx_food_entries_logged_at on food_entries (logged_at);
 
+-- One row per uploaded food-diary PDF: the original file lives in Supabase Storage (bucket
+-- "pdf-imports", auto-created by the backend on first upload -- see app/services/pdf_import.py);
+-- this row is the "receipt" -- what got extracted from it, so a user can revisit an old upload
+-- and see both the source file and what was imported/skipped from it.
+create table if not exists pdf_imports (
+    id bigint generated always as identity primary key,
+    user_id bigint not null references users (id) on delete cascade,
+    file_name text not null,
+    storage_path text not null,
+    imported_count integer not null default 0,
+    extracted_entries jsonb not null default '[]'::jsonb,
+    skipped_rows jsonb not null default '[]'::jsonb,
+    created_at timestamptz not null default now()
+);
+
+create index if not exists idx_pdf_imports_user_id_created_at on pdf_imports (user_id, created_at desc);
+
 -- The backend authenticates with the service_role key and enforces per-user access itself
 -- (every query is filtered by the authenticated user's id in application code), so RLS is
 -- left disabled here. If you ever query these tables from the frontend directly with the
