@@ -36,8 +36,6 @@ def get_entry(supabase: Client, user_id: int, entry_id: int) -> dict:
 
 
 def update_entry(supabase: Client, user_id: int, entry_id: int, payload: FoodEntryUpdate) -> dict:
-    get_entry(supabase, user_id, entry_id)  # 404s if missing or not owned by this user
-
     row = payload.model_dump(mode="json")
     result = (
         supabase.table("food_entries")
@@ -46,12 +44,21 @@ def update_entry(supabase: Client, user_id: int, entry_id: int, payload: FoodEnt
         .eq("user_id", user_id)
         .execute()
     )
+    if not result.data:
+        raise NotFoundError("Food entry not found")
     return result.data[0]
 
 
 def delete_entry(supabase: Client, user_id: int, entry_id: int) -> None:
-    get_entry(supabase, user_id, entry_id)  # 404s if missing or not owned by this user
-    supabase.table("food_entries").delete().eq("id", entry_id).eq("user_id", user_id).execute()
+    result = (
+        supabase.table("food_entries")
+        .delete()
+        .eq("id", entry_id)
+        .eq("user_id", user_id)
+        .execute()
+    )
+    if not result.data:
+        raise NotFoundError("Food entry not found")
 
 
 def list_entries(

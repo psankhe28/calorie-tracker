@@ -12,7 +12,7 @@ _MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 
 @router.post("/extract-nutrition", response_model=NutritionExtraction)
-async def extract_nutrition(
+def extract_nutrition(
     file: UploadFile,
     current_user: AuthUser = Depends(get_current_user),
 ) -> NutritionExtraction:
@@ -22,7 +22,7 @@ async def extract_nutrition(
             detail=f"Unsupported image type '{file.content_type}'. Allowed: {', '.join(sorted(_ALLOWED_TYPES))}",
         )
 
-    image_bytes = await file.read()
+    image_bytes = file.file.read()
     if not image_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
     if len(image_bytes) > _MAX_IMAGE_BYTES:

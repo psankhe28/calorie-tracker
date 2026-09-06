@@ -19,7 +19,7 @@ _MAX_PDF_BYTES = 15 * 1024 * 1024
 
 
 @router.post("/pdf", response_model=ImportResult)
-async def import_pdf(
+def import_pdf(
     file: UploadFile,
     supabase: Client = Depends(get_supabase),
     current_user: AuthUser = Depends(get_current_user),
@@ -30,7 +30,7 @@ async def import_pdf(
             detail=f"Expected a PDF file, got '{file.content_type}'",
         )
 
-    pdf_bytes = await file.read()
+    pdf_bytes = file.file.read()
     if not pdf_bytes:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
     if len(pdf_bytes) > _MAX_PDF_BYTES:

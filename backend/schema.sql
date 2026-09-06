@@ -56,6 +56,11 @@ create table if not exists food_entries (
 create index if not exists idx_food_entries_user_id on food_entries (user_id);
 create index if not exists idx_food_entries_logged_at on food_entries (logged_at);
 
+-- Reports and the food-entries list both filter by user_id and then a logged_at range/order --
+-- this composite index lets Postgres satisfy those with a single index scan instead of
+-- combining the two single-column indexes above.
+create index if not exists idx_food_entries_user_id_logged_at on food_entries (user_id, logged_at desc);
+
 -- One row per uploaded food-diary PDF: the original file lives in Supabase Storage (bucket
 -- "pdf-imports", auto-created by the backend on first upload -- see app/services/pdf_import.py);
 -- this row is the "receipt" -- what got extracted from it, so a user can revisit an old upload
