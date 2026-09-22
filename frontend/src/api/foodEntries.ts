@@ -5,6 +5,7 @@ export interface ListFoodEntriesParams {
   startDate?: string;
   endDate?: string;
   mealType?: MealType;
+  q?: string;
   page?: number;
   pageSize?: number;
 }
@@ -15,6 +16,7 @@ export async function listFoodEntries(params: ListFoodEntriesParams): Promise<Pa
       start_date: params.startDate,
       end_date: params.endDate,
       meal_type: params.mealType,
+      q: params.q || undefined,
       page: params.page ?? 1,
       page_size: params.pageSize ?? 20,
     },

@@ -16,8 +16,17 @@ settings = get_settings()
 _SYSTEM_PROMPT = """You are the in-app assistant for a personal calorie tracker. You can log meals, \
 read and update goals, list past food entries, and summarize a user's week — all via the tools \
 provided. Always use a tool instead of guessing when the user asks you to change or read their data. \
-When a date isn't given, assume today. Keep replies short and conversational. Calories and macros \
-you invent for a logged meal should be reasonable estimates unless the user gives exact numbers."""
+When logging a new meal and no date is given, assume today. Keep replies short and conversational. \
+Calories and macros you invent for a logged meal should be reasonable estimates unless the user gives \
+exact numbers.
+
+When the user asks about patterns in what they've eaten — e.g. cuisine type ("how many times did I eat \
+North Indian food"), ingredients, or favorite dishes — call get_food_analysis. Do NOT assume "today" or \
+"this week" for these questions: unless the user names a specific period, omit start_date/end_date \
+entirely so the whole meal history is searched. get_food_analysis returns raw food names, meal types, \
+and timestamps with no cuisine or category field, so classify each food item yourself using your own \
+knowledge (e.g. dal, roti, paneer, rajma, chole are North Indian) and summarize the count/dates back \
+to the user."""
 
 _TOOLS = [
     {
@@ -97,6 +106,20 @@ _TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_food_analysis",
+            "description": "Get the current user's meal log (food name, meal type, timestamp) for a date range, with no cuisine or category labels attached. Use this to answer questions about food patterns — e.g. cuisine type, ingredients, or favorite dishes — by classifying the returned food names yourself.",
+            "parameters": {
+                "type": "object", 
+                "properties": {
+                    "start_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "end_date": {"type": "string", "description": "YYYY-MM-DD"},
+                    "meal_type": {"type": "string", "enum": [m.value for m in MealType]},
+            },},
+        },
+    },
 ]
 
 
@@ -145,6 +168,7 @@ def _dispatch_tool(supabase: Client, user_id: int, name: str, tool_input: dict) 
             datetime.combine(_parse_date(tool_input.get("start_date")) or date.today() - timedelta(days=7), datetime.min.time()),
             datetime.combine(_parse_date(tool_input.get("end_date")) or date.today(), datetime.max.time()),
             MealType(tool_input["meal_type"]) if tool_input.get("meal_type") else None,
+            None,
             page=1,
             page_size=50,
         )
@@ -170,6 +194,12 @@ def _dispatch_tool(supabase: Client, user_id: int, name: str, tool_input: dict) 
             "macro_breakdown": [d.model_dump() for d in macros.days],
             "goal_vs_actual": [m.model_dump() for m in comparison.metrics] if comparison else None,
         }
+
+    if name == "get_food_analysis":
+        start = _parse_date(tool_input.get("start_date"))
+        end = _parse_date(tool_input.get("end_date"))
+        analysis = report_service.analyze_food_group(supabase, user_id, start, end)
+        return {"food": [d.model_dump() for d in analysis.food_list]}
 
     raise ValueError(f"Unknown tool: {name}")
 

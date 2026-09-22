@@ -23,6 +23,11 @@ class GoalVsActual(BaseModel):
     goal: float
     actual: float
 
+class Food(BaseModel):
+    name: str
+    meal_type: str
+    logged_at: str
+
 
 class WeeklyCaloriesReport(BaseModel):
     days: list[DailyCalories]
@@ -38,3 +43,6 @@ class MicroSummaryReport(BaseModel):
 
 class GoalVsActualReport(BaseModel):
     metrics: list[GoalVsActual]
+
+class FoodLog(BaseModel):
+    food_list: list[Food]

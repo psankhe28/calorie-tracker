@@ -1,21 +1,21 @@
 import { useEffect, useState } from "react";
 import { MealEntryForm } from "../components/MealEntryForm";
-import { PageSizeSelect } from "../components/PageSizeSelect";
 import { getApiErrorMessage } from "../api/client";
 import { createFoodEntry, deleteFoodEntry, listFoodEntries, updateFoodEntry } from "../api/foodEntries";
 import type { FoodEntry, FoodEntryInput, MealType } from "../api/types";
 import { EditIcon, PlusIcon, TrashIcon } from "../components/icons";
 
-const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE = 10;
 
 export function MealLog() {
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<number>(DEFAULT_PAGE_SIZE);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [mealType, setMealType] = useState<MealType | "">("");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -29,8 +29,9 @@ export function MealLog() {
         startDate: startDate ? `${startDate}T00:00:00` : undefined,
         endDate: endDate ? `${endDate}T23:59:59` : undefined,
         mealType: mealType || undefined,
+        q: debouncedSearch || undefined,
         page,
-        pageSize,
+        pageSize: PAGE_SIZE,
       });
       setEntries(result.items);
       setTotal(result.total);
@@ -42,9 +43,16 @@ export function MealLog() {
   }
 
   useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search.toLowerCase());
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, startDate, endDate, mealType]);
+  }, [page, startDate, endDate, mealType, debouncedSearch]);
 
   async function handleCreate(input: FoodEntryInput) {
     await createFoodEntry(input);
@@ -70,7 +78,7 @@ export function MealLog() {
     }
   }
 
-  const totalPages = Math.max(Math.ceil(total / pageSize), 1);
+  const totalPages = Math.max(Math.ceil(total / PAGE_SIZE), 1);
 
   return (
     <div className="page">
@@ -88,6 +96,16 @@ export function MealLog() {
             <input id="end_date" type="date" value={endDate} onChange={(e) => { setPage(1); setEndDate(e.target.value); }} />
           </div>
           <div className="field">
+            <label htmlFor="search">Search</label>
+            <input
+              id="search"
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search food..."
+            />
+          </div>
+          <div className="field">
             <label htmlFor="filter_meal_type">Meal type</label>
             <select
               id="filter_meal_type"
@@ -102,6 +120,7 @@ export function MealLog() {
             </select>
           </div>
         </div>
+        
       </div>
 
       {editingEntry ? (
@@ -198,13 +217,6 @@ export function MealLog() {
           <button className="btn btn-secondary" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
             Next
           </button>
-          <PageSizeSelect
-            value={pageSize}
-            onChange={(size) => {
-              setPageSize(size);
-              setPage(1);
-            }}
-          />
         </div>
       </div>
     </div>

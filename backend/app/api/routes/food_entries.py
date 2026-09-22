@@ -26,12 +26,13 @@ def list_food_entries(
     start_date: datetime | None = Query(default=None),
     end_date: datetime | None = Query(default=None),
     meal_type: MealType | None = Query(default=None),
+    q: str | None = Query(default=None),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     supabase: Client = Depends(get_supabase),
     current_user: AuthUser = Depends(get_current_user),
 ) -> Page[FoodEntryResponse]:
-    result = food_service.list_entries(supabase, current_user.id, start_date, end_date, meal_type, page, page_size)
+    result = food_service.list_entries(supabase, current_user.id, start_date, end_date, meal_type, q, page, page_size)
     return Page[FoodEntryResponse](
         items=[FoodEntryResponse.model_validate(item) for item in result.items],
         page=result.page,

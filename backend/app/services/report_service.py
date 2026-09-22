@@ -6,6 +6,7 @@ from supabase import Client
 from app.core.errors import NotFoundError
 from app.schemas.report import (
     DailyCalories,
+    Food,
     GoalVsActual,
     GoalVsActualReport,
     MacroBreakdown,
@@ -13,6 +14,7 @@ from app.schemas.report import (
     MicroSummary,
     MicroSummaryReport,
     WeeklyCaloriesReport,
+    FoodLog
 )
 
 
@@ -126,3 +128,23 @@ def goal_vs_actual(
         GoalVsActual(metric="fat_g", goal=goal["fat_target_g"], actual=round(actual_fat, 2)),
     ]
     return GoalVsActualReport(metrics=metrics)
+
+def analyze_food_group(
+    supabase: Client, user_id: int, start_date: date | None, end_date: date | None
+) -> FoodLog:
+    if start_date is None and end_date is None:
+        # No period specified — this tool answers open-ended questions like "how many
+        # times have I eaten X", so search the whole log instead of defaulting to a week.
+        result = supabase.table("food_entries").select("*").eq("user_id", user_id).execute()
+        entries = result.data
+    else:
+        start, end = _default_range(start_date, end_date)
+        entries = _entries_in_range(supabase, user_id, start, end)
+    if not entries:
+        raise NotFoundError("No food entries found in that date range")
+
+    food_list = [
+        Food(name=e["food_name"], meal_type=e["meal_type"], logged_at=e["logged_at"])
+        for e in entries
+    ]
+    return FoodLog(food_list=food_list)
