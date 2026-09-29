@@ -1,5 +1,5 @@
 import { apiClient } from "./client";
-import type { DailyCalories, GoalVsActualMetric, MacroBreakdownDay, MicroNutrient } from "./types";
+import type { DailyCalories, GoalVsActualMetric, MacroBreakdownDay, MicroNutrient, MonthlyCalories, YearlyCalories } from "./types";
 
 export interface ReportRangeParams {
   startDate?: string;
@@ -37,3 +37,16 @@ export async function getGoalVsActual(range: ReportRangeParams): Promise<GoalVsA
   });
   return data.metrics;
 }
+
+export async function getYearlyCalories(range: ReportRangeParams): Promise<YearlyCalories[]> {
+  const { data } = await apiClient.get<{ years: YearlyCalories[] }>("/api/reports/yearly-calories", {
+    params: toParams(range),
+  });
+  return data.years;
+}
+
+export async function getMonthlyCalories(): Promise<MonthlyCalories[]> {
+  const { data } = await apiClient.get<{ months: MonthlyCalories[] }>("/api/reports/monthly-calories");
+  return data.months;
+}
+

@@ -14,7 +14,11 @@ from app.schemas.report import (
     MicroSummary,
     MicroSummaryReport,
     WeeklyCaloriesReport,
-    FoodLog
+    FoodLog,
+    YearlyCalories,
+    YearlyCaloriesReport,
+    MonthlyCalories,
+    MonthlyCaloriesReport,
 )
 
 
@@ -148,3 +152,65 @@ def analyze_food_group(
         for e in entries
     ]
     return FoodLog(food_list=food_list)
+
+def ten_yearly_calorie_trend(
+    supabase: Client, user_id: int, start_date: date | None, end_date: date | None
+) -> YearlyCaloriesReport:
+    end = end_date or date.today()
+    start = start_date or date(end.year - 10, 1, 1)
+
+    start_dt = datetime.combine(start, datetime.min.time())
+    end_dt = datetime.combine(end, datetime.max.time())
+
+    totals: dict[str, float] = defaultdict(float)
+    for y in range(start.year, end.year + 1):
+        totals[str(y)] = 0.0
+
+    # Paginate: PostgREST caps responses at 1000 rows by default; 10 years
+    # of daily entries exceeds that so we fetch in pages of 1000.
+    PAGE = 1000
+    offset = 0
+    while True:
+        result = (
+            supabase.table("food_entries")
+            .select("logged_at, calories")
+            .eq("user_id", user_id)
+            .gte("logged_at", start_dt.isoformat())
+            .lte("logged_at", end_dt.isoformat())
+            .range(offset, offset + PAGE - 1)
+            .execute()
+        )
+        for entry in result.data:
+            year = str(datetime.fromisoformat(entry["logged_at"]).year)
+            totals[year] += entry["calories"]
+        if len(result.data) < PAGE:
+            break
+        offset += PAGE
+
+    years = [YearlyCalories(year=y, calories=round(cal, 2)) for y, cal in sorted(totals.items())]
+    return YearlyCaloriesReport(years=years)
+
+
+def monthly_calorie_trend(
+    supabase: Client, user_id: int
+) -> MonthlyCaloriesReport:
+    today = date.today()
+    start = date(today.year, 1, 1)
+    entries = _entries_in_range(supabase, user_id, start, today)
+
+    totals: dict[str, float] = defaultdict(float)
+    for m in range(1, today.month + 1):
+        totals[date(today.year, m, 1).strftime("%b")] = 0.0
+
+    for entry in entries:
+        d = _entry_date(entry)
+        totals[d.strftime("%b")] += entry["calories"]
+
+    months_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    months = [
+        MonthlyCalories(month=m, calories=round(totals[m], 2))
+        for m in months_order if m in totals
+    ]
+    return MonthlyCaloriesReport(months=months)
+    

@@ -77,6 +77,16 @@ export interface GoalVsActualMetric {
   actual: number;
 }
 
+export interface YearlyCalories {
+  year: string;
+  calories: number;
+}
+
+export interface MonthlyCalories {
+  month: string;
+  calories: number;
+}
+
 export interface NutritionExtraction {
   food_name: string;
   quantity: number;

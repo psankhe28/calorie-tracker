@@ -10,7 +10,9 @@ from app.schemas.report import (
     GoalVsActualReport,
     MacroBreakdownReport,
     MicroSummaryReport,
+    MonthlyCaloriesReport,
     WeeklyCaloriesReport,
+    YearlyCaloriesReport,
 )
 from app.services import report_service
 
@@ -55,3 +57,21 @@ def goal_vs_actual(
     current_user: AuthUser = Depends(get_current_user),
 ) -> GoalVsActualReport:
     return report_service.goal_vs_actual(supabase, current_user.id, start_date, end_date)
+
+
+@router.get("/yearly-calories", response_model=YearlyCaloriesReport)
+def yearly_calories(
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
+    supabase: Client = Depends(get_supabase),
+    current_user: AuthUser = Depends(get_current_user),
+) -> YearlyCaloriesReport:
+    return report_service.ten_yearly_calorie_trend(supabase, current_user.id, start_date, end_date)
+
+
+@router.get("/monthly-calories", response_model=MonthlyCaloriesReport)
+def monthly_calories(
+    supabase: Client = Depends(get_supabase),
+    current_user: AuthUser = Depends(get_current_user),
+) -> MonthlyCaloriesReport:
+    return report_service.monthly_calorie_trend(supabase, current_user.id)

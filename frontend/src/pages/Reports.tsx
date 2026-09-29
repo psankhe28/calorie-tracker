@@ -12,8 +12,8 @@ import {
   YAxis,
 } from "recharts";
 import { getApiErrorMessage } from "../api/client";
-import { getGoalVsActual, getMacroBreakdown, getMicroSummary, getWeeklyCalories } from "../api/reports";
-import type { DailyCalories, GoalVsActualMetric, MacroBreakdownDay, MicroNutrient } from "../api/types";
+import { getGoalVsActual, getMacroBreakdown, getMicroSummary, getMonthlyCalories, getWeeklyCalories, getYearlyCalories } from "../api/reports";
+import type { DailyCalories, GoalVsActualMetric, MacroBreakdownDay, MicroNutrient, MonthlyCalories, YearlyCalories } from "../api/types";
 
 function isoDate(date: Date): string {
   return date.toISOString().slice(0, 10);
@@ -42,21 +42,33 @@ export function Reports() {
   const [macros, setMacros] = useState<MacroBreakdownDay[]>([]);
   const [micros, setMicros] = useState<MicroNutrient[]>([]);
   const [goalComparison, setGoalComparison] = useState<GoalVsActualMetric[] | null>(null);
+  const [yearlyCalories, setYearlyCalories] = useState<YearlyCalories[]>([]);
+  const [monthlyCalories, setMonthlyCalories] = useState<MonthlyCalories[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [goalError, setGoalError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const range = { startDate, endDate };
+    const tenYearsAgoYear = new Date(endDate).getFullYear() - 10;
+    const last_10_years = { startDate: `${tenYearsAgoYear}-01-01`, endDate };
     setIsLoading(true);
     setError(null);
     setGoalError(null);
 
-    Promise.all([getWeeklyCalories(range), getMacroBreakdown(range), getMicroSummary(range)])
-      .then(([cal, mac, mic]) => {
+    Promise.all([
+      getWeeklyCalories(range),
+      getMacroBreakdown(range),
+      getMicroSummary(range),
+      getYearlyCalories(last_10_years),
+      getMonthlyCalories(),
+    ])
+      .then(([cal, mac, mic, yearCal, monthlyCal]) => {
         setCalories(cal);
         setMacros(mac);
         setMicros(mic);
+        setYearlyCalories(yearCal);
+        setMonthlyCalories(monthlyCal);
       })
       .catch((err) => setError(getApiErrorMessage(err)))
       .finally(() => setIsLoading(false));
@@ -161,6 +173,32 @@ export function Reports() {
                 </BarChart>
               </ResponsiveContainer>
             )}
+          </div>
+
+          <div className="card">
+            <h2 className="section-title">Calories — Last 10 Years</h2>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={yearlyCalories}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip {...tooltipProps} />
+                <Bar dataKey="calories" name="Calories" fill="#4f46e5" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="card">
+            <h2 className="section-title">Calories — This Year by Month</h2>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={monthlyCalories}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} />
+                <Tooltip {...tooltipProps} />
+                <Bar dataKey="calories" name="Calories" fill="#16a34a" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}

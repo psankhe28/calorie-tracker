@@ -46,3 +46,17 @@ class GoalVsActualReport(BaseModel):
 
 class FoodLog(BaseModel):
     food_list: list[Food]
+
+class YearlyCaloriesReport(BaseModel):
+    years: list["YearlyCalories"]
+
+class YearlyCalories(BaseModel):
+    year: str
+    calories: float
+
+class MonthlyCalories(BaseModel):
+    month: str
+    calories: float
+
+class MonthlyCaloriesReport(BaseModel):
+    months: list[MonthlyCalories]
