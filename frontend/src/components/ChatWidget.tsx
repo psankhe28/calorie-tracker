@@ -8,6 +8,8 @@ import { ChatIcon } from "./icons";
 import { MarkdownLite } from "./MarkdownLite";
 
 const SUGGESTIONS = ["Summarize my week", "What are my goals?", "Log a banana, 105 calories"];
+// Mirrors _MAX_USER_MESSAGES in backend/app/services/chat_agent.py; assistant replies don't count.
+const MAX_USER_MESSAGES = 5;
 
 export function ChatWidget() {
   const { user } = useAuth();
@@ -33,8 +35,10 @@ export function ChatWidget() {
 
   if (!user || !AI_FEATURES_ENABLED) return null;
 
+  const limitReached = history.filter((m) => m.role === "user").length >= MAX_USER_MESSAGES;
+
   async function submitMessage(message: string) {
-    if (!message || isSending) return;
+    if (!message || isSending || limitReached) return;
     setError(null);
     setInput("");
     setHistory((prev) => [...prev, { role: "user", content: message }]);
@@ -49,6 +53,11 @@ export function ChatWidget() {
     } finally {
       setIsSending(false);
     }
+  }
+
+  function startNewChat() {
+    setHistory([]);
+    setError(null);
   }
 
   function handleSubmit(event: FormEvent) {
@@ -128,25 +137,34 @@ export function ChatWidget() {
               </div>
             )}
           </div>
-          <form className="chat-input-row" onSubmit={handleSubmit}>
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about your meals, goals, or log something..."
-              disabled={isSending}
-              rows={1}
-            />
-            <button
-              className="btn chat-send-btn"
-              type="submit"
-              disabled={isSending || !input.trim()}
-              aria-label="Send message"
-            >
-              <SendIcon />
-            </button>
-          </form>
+          {limitReached && !isSending ? (
+            <div className="chat-limit-notice">
+              <span className="muted">This chat has reached its {MAX_USER_MESSAGES}-message limit.</span>
+              <button type="button" className="btn" onClick={startNewChat}>
+                New chat
+              </button>
+            </div>
+          ) : (
+            <form className="chat-input-row" onSubmit={handleSubmit}>
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Ask about your meals, goals, or log something..."
+                disabled={isSending}
+                rows={1}
+              />
+              <button
+                className="btn chat-send-btn"
+                type="submit"
+                disabled={isSending || !input.trim()}
+                aria-label="Send message"
+              >
+                <SendIcon />
+              </button>
+            </form>
+          )}
         </div>
       )}
 

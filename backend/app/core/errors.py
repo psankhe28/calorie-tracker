@@ -17,6 +17,11 @@ class ConflictError(AppError):
         super().__init__(message, status_code=409)
 
 
+class LimitExceededError(AppError):
+    def __init__(self, message: str = "Limit exceeded"):
+        super().__init__(message, status_code=429)
+
+
 class ExternalServiceError(AppError):
     def __init__(self, message: str = "An external service failed"):
         super().__init__(message, status_code=502)

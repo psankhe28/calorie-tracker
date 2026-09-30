@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from supabase import Client
 
 from app.core.config import get_settings
-from app.core.errors import AppError, ExternalServiceError
+from app.core.errors import AppError, ExternalServiceError, LimitExceededError
 from app.schemas.chat import ChatMessage
 from app.schemas.food_entry import FoodEntryCreate, MealType
 from app.schemas.goal import GoalUpsert
@@ -12,6 +12,9 @@ from app.services import food_service, goal_service, report_service
 from app.services.openai_client import get_client
 
 settings = get_settings()
+
+# Max user messages per chat; assistant replies don't count toward it.
+_MAX_USER_MESSAGES = 5
 
 _SYSTEM_PROMPT = """You are the in-app assistant for a personal calorie tracker. You can log meals, \
 read and update goals, list past food entries, and summarize a user's week — all via the tools \
@@ -205,6 +208,13 @@ def _dispatch_tool(supabase: Client, user_id: int, name: str, tool_input: dict) 
 
 
 def handle_chat(supabase: Client, user_id: int, message: str, history: list[ChatMessage]) -> tuple[str, list[ChatMessage]]:
+    # The client resends the whole conversation each request, so count its user turns plus this one.
+    user_message_count = sum(1 for m in history if m.role == "user") + 1
+    if user_message_count > _MAX_USER_MESSAGES:
+        raise LimitExceededError(
+            f"This chat has reached its limit of {_MAX_USER_MESSAGES} messages. Start a new chat to continue."
+        )
+
     client = get_client()
 
     messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
